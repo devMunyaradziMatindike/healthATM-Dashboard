@@ -3,8 +3,8 @@ import { ref } from 'vue'
 
 const emit = defineEmits(['success'])
 
-const email = ref('healthatm@axissol.com')
-const password = ref('password')
+const email = ref('')
+const password = ref('')
 const error = ref(null)
 const logoFailed = ref(false)
 const logoUrl = new URL('../assets/axis-logo.jpeg', import.meta.url).href
@@ -36,9 +36,16 @@ function submit() {
       <h1 class="title">Health ATM</h1>
       <p class="subtitle">Sign in to continue</p>
 
-      <form class="form" @submit.prevent="submit">
+      <form class="form" autocomplete="off" @submit.prevent="submit">
         <label class="label" for="email">Email</label>
-        <input id="email" v-model.trim="email" class="input" type="email" autocomplete="username" />
+        <input
+          id="email"
+          v-model.trim="email"
+          class="input"
+          type="email"
+          autocomplete="off"
+          inputmode="email"
+        />
 
         <label class="label" for="password">Password</label>
         <input
@@ -46,7 +53,7 @@ function submit() {
           v-model="password"
           class="input"
           type="password"
-          autocomplete="current-password"
+          autocomplete="new-password"
         />
 
         <button class="btn" type="submit">Login</button>
