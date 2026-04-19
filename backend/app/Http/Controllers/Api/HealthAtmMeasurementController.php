@@ -13,15 +13,19 @@ use Illuminate\Validation\ValidationException;
 
 class HealthAtmMeasurementController extends Controller
 {
+    private const DEFAULT_EQUIP_ID = 'UNKNOWN-EQUIP';
+
     public function store(Request $request)
     {
-        $data = $request->all();
+        $originalData = $request->all();
 
-        if (!is_array($data)) {
+        if (!is_array($originalData)) {
             throw ValidationException::withMessages([
                 'payload' => 'Invalid JSON payload.',
             ]);
         }
+
+        $data = $this->normalizeHealthAtmPayload($originalData);
 
         $validated = validator($data, [
             'equip_id' => ['required', 'string', 'max:50'],
@@ -39,18 +43,18 @@ class HealthAtmMeasurementController extends Controller
             'birth' => ['nullable', 'string', 'max:10'],
             'nation' => ['nullable', 'integer'],
 
-            'start_time' => ['nullable', 'date_format:Y-m-d H:i:s'],
-            'end_time' => ['nullable', 'date_format:Y-m-d H:i:s'],
+            'start_time' => ['nullable', 'date'],
+            'end_time' => ['nullable', 'date'],
             'utc' => ['nullable', 'integer'],
         ])->validate();
 
         $endTime = isset($validated['end_time'])
-            ? Carbon::createFromFormat('Y-m-d H:i:s', $validated['end_time'])
+            ? Carbon::parse($validated['end_time'])
             : now();
 
         $measureDate = $endTime->toDateString();
 
-        DB::transaction(function () use ($validated, $data, $endTime, $measureDate) {
+        DB::transaction(function () use ($validated, $data, $endTime, $measureDate, $originalData) {
             $device = Device::query()->updateOrCreate(
                 ['equip_id' => $validated['equip_id']],
                 [
@@ -71,8 +75,12 @@ class HealthAtmMeasurementController extends Controller
                     'equip_number' => $validated['equip_number'] ?? null,
                     'serial_number' => $validated['serial_number'] ?? null,
                     'token' => $validated['token'] ?? null,
-                    'start_time' => $validated['start_time'] ?? null,
-                    'end_time' => $validated['end_time'] ?? null,
+                    'start_time' => isset($validated['start_time'])
+                        ? Carbon::parse($validated['start_time'])
+                        : null,
+                    'end_time' => isset($validated['end_time'])
+                        ? Carbon::parse($validated['end_time'])
+                        : null,
                     'utc' => $validated['utc'] ?? null,
                     'measure_date' => $measureDate,
                 ],
@@ -129,7 +137,7 @@ class HealthAtmMeasurementController extends Controller
                     'tag10',
                 ])->all(),
                 [
-                    'raw_payload' => $data,
+                    'raw_payload' => $originalData,
                 ],
             ));
         });
@@ -138,6 +146,60 @@ class HealthAtmMeasurementController extends Controller
             'code' => 0,
             'msg' => 'success',
         ]);
+    }
+
+    /**
+     * Apply defaults for missing/empty values and coerce types the Health ATM often sends as strings or ISO dates.
+     */
+    private function normalizeHealthAtmPayload(array $data): array
+    {
+        $equip = $data['equip_id'] ?? null;
+        if ($equip === null || $equip === '' || (is_string($equip) && trim($equip) === '')) {
+            $data['equip_id'] = self::DEFAULT_EQUIP_ID;
+        } else {
+            $data['equip_id'] = is_string($equip) ? trim($equip) : (string) $equip;
+            if (strlen($data['equip_id']) > 50) {
+                $data['equip_id'] = substr($data['equip_id'], 0, 50);
+            }
+        }
+
+        foreach (['serial_number', 'gender', 'age', 'utc', 'nation'] as $key) {
+            if (!array_key_exists($key, $data) || $data[$key] === null || $data[$key] === '') {
+                continue;
+            }
+            if (is_string($data[$key]) && is_numeric($data[$key])) {
+                $data[$key] = (int) $data[$key];
+            }
+        }
+
+        foreach (['start_time', 'end_time'] as $key) {
+            if (!array_key_exists($key, $data) || $data[$key] === null) {
+                continue;
+            }
+            if (is_string($data[$key])) {
+                $trimmed = trim($data[$key]);
+                if ($trimmed === '') {
+                    $data[$key] = null;
+
+                    continue;
+                }
+                $data[$key] = str_replace('T', ' ', preg_replace('/\.\d{3}Z?$/', '', str_replace('Z', '', $trimmed)));
+            }
+        }
+
+        $endEmpty = !isset($data['end_time']) || $data['end_time'] === null
+            || (is_string($data['end_time']) && trim((string) $data['end_time']) === '');
+        $startEmpty = !isset($data['start_time']) || $data['start_time'] === null
+            || (is_string($data['start_time']) && trim((string) $data['start_time']) === '');
+
+        if ($endEmpty) {
+            $data['end_time'] = now()->format('Y-m-d H:i:s');
+        }
+        if ($startEmpty) {
+            $data['start_time'] = Carbon::parse($data['end_time'])->copy()->subMinutes(2)->format('Y-m-d H:i:s');
+        }
+
+        return $data;
     }
 
     private function resolvePatient(array $data): ?Patient
