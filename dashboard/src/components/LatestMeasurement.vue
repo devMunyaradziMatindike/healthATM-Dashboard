@@ -21,16 +21,21 @@ async function load() {
 
 onMounted(load)
 
+function fmtNumber(val) {
+  if (val == null) return null
+  const n = Number(val)
+  if (!Number.isFinite(n)) return null
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
+
 const heightCm = computed(() =>
-  measurement.value?.height != null ? (Number(measurement.value.height) / 10).toFixed(1) : null,
+  measurement.value?.height != null ? fmtNumber(measurement.value.height) : null,
 )
 const weightKg = computed(() =>
-  measurement.value?.weight != null ? (Number(measurement.value.weight) / 10).toFixed(1) : null,
+  measurement.value?.weight != null ? fmtNumber(measurement.value.weight) : null,
 )
 const tempC = computed(() =>
-  measurement.value?.body_temperature != null
-    ? (Number(measurement.value.body_temperature) / 10).toFixed(1)
-    : null,
+  measurement.value?.body_temperature != null ? fmtNumber(measurement.value.body_temperature) : null,
 )
 </script>
 

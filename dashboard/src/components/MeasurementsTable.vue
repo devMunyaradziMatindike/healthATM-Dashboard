@@ -50,7 +50,7 @@ function scaled(val) {
   if (val == null) return null
   const n = Number(val)
   if (!Number.isFinite(n)) return null
-  return (n / 10).toFixed(1)
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
 }
 
 const lastPage = computed(() => response.value?.last_page ?? 1)
